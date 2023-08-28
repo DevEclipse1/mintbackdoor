@@ -8,6 +8,9 @@ customtkinter.set_default_color_theme("green")
 app = customtkinter.CTk()
 app.geometry("480x200")
 
+app.iconbitmap("mint.ico")
+app.title("Mint Backdoor Builder")
+
 label1 = customtkinter.CTkLabel(app,text="Mint Grabber Builder")
 label1.pack()
 label2 = customtkinter.CTkLabel(app,text="Discord Bot Token")
