@@ -1,4 +1,1 @@
-you need this library to build:
-customtkinter
-
-pip install customtkinter
+just run requirements.py before using and ok
